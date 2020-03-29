@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <style>
+      hr {
+        background-color: #D2D4D5;
+        height: 2px;
+        border: 0px;
+      }
+      .container{
+        margin-left:120px;
+        margin-right:120px;
+      }
+      div{
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      mark{
+        background-color: #F3CED7;
+        color: #F65B81;
+      }
+    </style>
+    <title>HTB Mango Writeup</title>
+  </head>
+  <body class="container">
+    <header>
+      <h1 style="color: #384B60"><center>Hack The Box Writeup: Mango</center></h1>
+      <center><div style="color: #384B60">3/28/2020</div></center>
+      <hr/>
+    </header>
+    <article style="margin-top:60px">
+      <div style="font-size: 25px">Introduction:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <img src="pictures/mango/mango_profile.png" alt="Mango" style="width:42%">
+      <div>Mango is a medium linux machine on Hack The Box that involves Mongo DB Injection to get User, and the abuse of a specific suid binary to get Root.</div>
+      <div>Its ip is <mark>10.10.10.162</mark> and I will add it to <mark>/etc/hosts</mark> as <mark>mango.htb</mark>.</div>
+      <br/>
+      <div style="font-size: 25px">Nmap:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>Let's start with a <mark>nmap</mark> scan on our target:</div>
+      <br/>
+      <img src="pictures/mango/nmap_result.png" alt="Nmap" style="width:78%">
+      <div>Analysing our <mark>nmap</mark> result, we got <mark>ssh</mark> on port 22, <mark>http</mark> on port 80 and <mark>ssl</mark> on port 443.</div>
+      <br/>
+      <div style="font-size: 25px">Web Enumeration:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>Going to <mark>http://mango.htb</mark>, we see a <mark>403 forbidden</mark> page.</div>
+      <br/>
+      <img src="pictures/mango/forbidden.png" alt="404" style="width:38%">
+      <div>Running <mark>Dirbuster</mark> on it does not reveal anything useful too, so let's move on to <mark>https</mark>.</div>
+      <br/>
+      <div><mark>https://mango.htb</mark>:</div>
+      <br/>
+      <img src="pictures/mango/search_page.png" alt="search page" style="width:38%">
+      <div>It seems like a normal search page...</div>
+      <div>But when we run <mark>Dirbuster</mark> on it, we found a page called <mark>analytics.php</mark>.</div>
+      <br/>
+      <div><mark>analytics.php</mark>:</div>
+      <img src="pictures/mango/error_msg.png" alt="analytics.php" style="width:100%">
+      <div>From this page, we can see that only the subdomain <mark>*.codepen.io</mark> is able to use the key.</div>
+      <div>Let's add <mark>mango.codepen.io</mark> in /etc/hosts.</div>
+      <br/>
+      <img src="pictures/mango/codepen.png" alt="codepen" style="width:100%">
+      <div>Now we can view the data in <mark>analytics.php</mark></div>
+      <div>However, this is actually a rabbit hole that I spent too much time on, and the user we found is not at all useful in solving this box</div>
+      <div>Let's go back and check the <mark>SSL certificate</mark> of the page.</div>
+      <br/>
+      <div><mark>SSL certificate</mark>:</div>
+      <br/>
+      <img src="pictures/mango/cert.png" alt="cert" style="width:60%">
+      <div>We see another subdomain <mark>staging-order.mango.htb</mark>.(T__T)</div>
+      <div>So let's add this to <mark>/etc/hosts</mark> and visit it.</div>
+      <br/>
+      <div><mark>staging-order.mango.htb</mark>:</div>
+      <br/>
+      <img src="pictures/mango/login_page.png" alt="login page" style="width:86%">
+      <div>All we see is a login page... <mark>Dirbuster</mark> did not reveal anything and bruteforcing it didn't work.</div>
+      <div>I was stucked for a while, so I decided to look at the forum for hints.</div>
+      <div>From the forum, I realised that this machine is running <mark>Mongo DB</mark> as its backend database.</div>
+      <div>Now let's try to exploit it!</div>
+      <br/>
+      <div style="font-size: 25px">NoSQL Exploit:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>After some research on NoSQL Injections, I wrote a <mark>python</mark> script to enumerate the usernames and passwords in the database:</div>
+      <br/>
+      <img src="pictures/mango/exploit_code.png" alt="exploit code" style="width:80%">
+      <div>Let's give this script a try and see how it goes.</div>
+      <br/>
+      <img src="pictures/mango/username.png" alt="exploit results" style="width:56%">
+      <div>The script worked and it return me the username of two accounts, <mark>admin</mark> and <mark>mango</mark>.</div>
+      <div>Let's change the order of <mark>username</mark> and <mark>password</mark> to enumerate for passwords.</div>
+      <br/>
+      <div>After a while, I got the two passwords.</div>
+      <br/>
+      <img src="pictures/mango/password.png" alt="password results" style="width:56%">
+      <div>Since this machine has <mark>SSH</mark> open, let's try to <mark>SSH</mark> in with the complicated credentials!</div>
+      <br/>
+      <div style="font-size: 25px">Getting User:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>After trying the combinations, I was able to SSH in as <mark>mango</mark> with the password <mark>h3mXK8RhU~f{]f5H</mark>
+      <div>I tried grabbing <mark>user.txt</mark>, but was unable to do so.</div>
+      <br/>
+      <img src="pictures/mango/mango_no_user.png" alt="no user" style="width:56%">
+      <div>We have to get access to the account <mark>admin</mark> to be able to read <mark>user.txt</mark>.</div>
+      <div>Fortunately the password <mark>t9KcS3>!0B#2</mark> worked when I tried to <mark>su</mark> as <mark>admin</mark>.</div>
+      <br/>
+      <img src="pictures/mango/we_are_admin.png" alt="user" style="width:56%">
+      <div>We are finally able to grab <mark>user.txt</mark> now.</div>
+      <br/>
+      <div style="font-size: 25px">Getting Root:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>As a routine of my enumeration process, I would transfer <mark>linpeas.sh</mark> to the target machine.</div>
+      <div>Hence I transferred <mark>linpeas.sh</mark> with <mark>wget</mark> and ran it on the target machine.</div>
+      <div>Soon, I got back my scan results, and we can see that the suid binary <mark>jjs</mark> highlighted in orange.</div>
+      <br/>
+      <img src="pictures/mango/linpeas_results.png" alt="linpeas results" style="width:56%">
+      <div><mark>linpeas.sh</mark> highlights a highly possible privilege escalation vector as orange, so we should definitely take a look at it.</div>
+      <br/>
+      <div>After playing around with it and checking <mark>GTFOBins</mark>, I realised that I can execute system commands with the flag <mark>-scripting</mark>.</div>
+      <div>Now I just have to upload my <mark>SSH</mark> keys and I should be able to <mark>SSH</mark> as <mark>root</mark>.</div>
+      <br/>
+      <img src="pictures/mango/uploading_keys.png" alt="uploading keys" style="width:56%">
+      <div>I generated my <mark>ssh keys</mark> with the command <mark>ssh-keygen -f mango</mark> and uploaded them with the command <mark>$EXEC("echo 'your_public_key' > /root/.ssh/authorized_keys");</mark>.</div>
+      <br/>
+      <div>With this, we should be able to <mark>SSH</mark> in as <mark>root</mark>.</div>
+      <div>I ran the command <mark>ssh -i mango root@mango.htb</mark>...</div>
+      <br/>
+      <img src="pictures/mango/rooted.png" alt="ROOTED!" style="width:56%">
+      <div>aaaaaaaand we are <mark>root</mark>!</div>
+      <br/>
+      <div style="font-size: 25px">Conclusion:</div>
+      <hr align="left" width="180px">
+      <div><mark>Mango</mark> is a cool and unique box, and I enjoyed the script writing process the most.</div>
+      <div>I learnt about NoSQL Injection attacks and a little Javascript while playing with <mark>jjs</mark>.</div>
+      <div>This is my first writeup, and I hope you enjoyed it as much as I did writing it.</div>
+      <div>That's all I have for <mark>Mango</mark>, and I hope to see you the next time!</div>
+      <br/>
+      <div><center>Thank you for reading!</center></div>
+      <div><center>~chiefpie</center></div>
+    </article>
+  </body>
+</html>
