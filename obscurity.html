@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <style>
+      hr {
+        background-color: #D2D4D5;
+        height: 2px;
+        border: 0px;
+      }
+      .container{
+        margin-left:120px;
+        margin-right:120px;
+      }
+      div{
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      mark{
+        background-color: #F3CED7;
+        color: #F65B81;
+      }
+      a {
+        color: black;
+        text-decoration: none;
+      }
+      p {
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      .grid-container {
+        grid-template-columns: 75px 75px 75px;
+        grid-template-rows: 20px;
+      }
+    </style>
+    <title>HTB Obscurity Writeup</title>
+  </head>
+  <body class="container">
+    <header>
+      <div class="grid-container">
+        <a href="index.html" align="left">| Home |</a><!--
+        --><a href="about.html" align="left"> About |</a><!--
+        --><a href="writeups.html" align="left"> Writeups |</a>
+      </div>
+      <h1 style="color: #384B60"><center>Hack The Box Writeup: Obscurity</center></h1>
+      <center><div style="color: #384B60">4/8/2020</div></center>
+      <hr/>
+    </header>
+    <article style="margin-top:60px">
+      <div style="font-size: 25px">Introduction:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <img src="pictures/obscurity/obscurity.png" alt="Obscurity" style="width:42%">
+      <div>Hi guys, it's been a while since I last posted a writeup. As today is HBL day, I have some time to spare and decided to do a writeup on <mark>Obscurity</mark>.</div>
+      <div><mark>Obscurity</mark> is a medium linux machine that is heavy on <mark>python</mark> and requires quite a lot of custom exploitations.</div>
+      <div>Its ip is <mark>10.10.10.168</mark> and I will add it to <mark>/etc/hosts</mark> as <mark>obscurity.htb</mark>.</div>
+      <br/>
+      <div style="font-size: 25px">Nmap:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>Let's start with a <mark>nmap</mark> scan on our target:</div>
+      <br/>
+      <img src="pictures/obscurity/nmap.png" alt="Nmap" style="width:78%">
+      <div>Analysing our <mark>nmap</mark> result, we got <mark>ssh</mark> on port 22, <mark>http</mark> on port 80, <mark>http-proxy</mark> on port 8080 and <mark>cslistener</mark> on port 9000.</div>
+      <div>Let's start with web enumeration.</div>
+      <br/>
+      <div style="font-size: 25px">Web Enumeration:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>We are unable to connect to <mark>http://obscurity.htb</mark> as the port is closed.</div>
+      <br/>
+      <img src="pictures/obscurity/closed_80.png" alt="closed_80" style="width:58%">
+      <br/>
+      <div>Let's check <mark>http://obscurity.htb:8080</mark> instead.</div>
+      <br/>
+      <img src="pictures/obscurity/obscura.png" alt="webpage" style="width:88%">
+      <div>We see a simple web page and a rather confident message.</div>
+      <br/>
+      <div>Scrolling down further, we can find some more useful information:</div>
+      <img src="pictures/obscurity/info.png" alt="info" style="width:58%">
+      <img src="pictures/obscurity/moreinfo.png" alt="moreinfo" style="width:58%">
+      <div>We get some idea of the upcoming obstacles, and most importantly the path towards our foothold.</div>
+      <div>To view the source code of the website, we have to find it under some "secret development" directory. </div>
+      <div>Since we already know the name of the file we want, we can use this great tool called <mark>ffuf</mark> to find its directory.</div>
+      <br/>
+      <div><mark>ffuf</mark>:</div>
+      <img src="pictures/obscurity/ffuf.png" alt="ffuf" style="width:80%">
+      <div>I set the directory to "fuzz" and ran the tool.</div>
+      <div><mark>ffuf</mark> is extremely fast, and we found the directory "develop" in under three minutes.</div>
+      <br/>
+      <div>Navigating to <mark>http://obscurity.htb:8080/develop/SuperSecureServer.py</mark>, we get to read the source code of the website:</div>
+      <img src="pictures/obscurity/sourcecode.png" alt="sourcecode" style="width:88%">
+      <div>(...)The code is very long so I'm not pasting everything here.</div>
+      <div>Buttttttt now let's search to see if it contains any known dangerous functions.</div>
+      <br/>
+      <div><mark>exec()</mark>:</div>
+      <img src="pictures/obscurity/badcode.png" alt="dangerous function" style="width:78%">
+      <div>Sure enough, I found this dangerous function <mark>exec()</mark>.</div>
+      <div>As its name suggests, <mark>exec()</mark> allows users to execute commands.</div>
+      <div>Even better, it allows us to execute multiple commands separated by a semicolon.</div>
+      <div>Since we have the source code, we have the blueprint of how the web page will interact with its users.</div>
+      <div>Now let's try to get it to execute our commands.</div>
+      <br/>
+      <div><mark>exploit script</mark>:</div>
+      <img src="pictures/obscurity/exploit.png" alt="exploit" style="width:80%">
+      <div>I wrote a script to escape from the output formatting, execute our reverse shell, and follow through with a blank print statement to prevent errors.</div>
+      <br/>
+      <div>As soon as I ran the script, I got a shell as <mark>www-data</mark> on the machine.</div>
+      <img src="pictures/obscurity/shell.png" alt="shell" style="width:60%">
+      <div><mark>www-data</mark> is a low level user, and he is unable to read <mark>user.txt</mark>.</div>
+      <div>Let's look around and try to become a higher level user.</div>
+      <br/>
+      <div style="font-size: 25px">Getting User:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>In the <mark>home</mark> directory, we found a user <mark>robert</mark> and his directory.</div>
+      <div>There are some interesting files in his directory:</div>
+      <img src="pictures/obscurity/robertshares.png" alt="robertshares" style="width:66%">
+      <br/>
+      <div>Let's check the contents of each file.</div>
+      <div><mark>check.txt, out.txt</mark>:</div>
+      <img src="pictures/obscurity/check&out.png" alt="check&out" style="width:86%">
+      <div>There is some sort of encryption on the text.</div>
+      <br/>
+      <div><mark>passwordreminder.txt</mark>:</div>
+      <img src="pictures/obscurity/passreminder.png" alt="pass reminder" style="width:66%">
+      <div>Seems like <mark>robert</mark> left his encrypted password here.</div>
+      <br/>
+      <div><mark>SuperSecureCrypt.py</mark>:</div>
+      <img src="pictures/obscurity/securealgo.png" alt="algorithm" style="width:66%">
+      <img src="pictures/obscurity/usage2.png" alt="algorithm" style="width:66%">
+      <img src="pictures/obscurity/usage.png" alt="algorithm" style="width:66%">
+      <div>Now we can clearly see the encryption algorithm used.</div>
+      <br/>
+      <div>This method of encryption works by adding the <mark>chr()</mark> value of the original letter and the key letter together to form a new character.</div>
+      <div>To make things clearer:</div>
+      <img src="pictures/obscurity/decrypt.png" alt="decrypt" style="width:66%">
+      <div>We already have the encrypted text and the original text, so let's crack the key now!</div>
+      <br/>
+      <div><mark>keycracker</mark>:</div>
+      <img src="pictures/obscurity/cracker.png" alt="cracker" style="width:66%">
+      <div>I improvised on <mark>SuperSecureCrypt.py</mark> such that it can output the encryption key given two text files.</div>
+      <br/>
+      <div>Then I ran it on the machine and it gave me the key, <mark>alexandrovich</mark>.</div>
+      <img src="pictures/obscurity/crackedkey.png" alt="crackerwork" style="width:66%">
+      <div>Now we can use <mark>SuperSecureCrypt.py</mark> to decrypt the password.</div>
+      <br>
+      <div><mark>password</mark>:</div>
+      <img src="pictures/obscurity/password.png" alt="cracked" style="width:76%">
+      <div>Running the command <mark>python3 SuperSecureCrypt.py -i passwordreminder.txt -k alexandrovich -d -o /tmp/password.txt</mark>, we get the password <mark>SecThruObsFTW</mark>.</div>
+      <br/>
+      <img src="pictures/obscurity/user.png" alt="robert" style="width:56%">
+      <div>With his password, we can <mark>SSH</mark> as <mark>robert</mark> and read <mark>user.txt</mark>.</div>
+      <br/>
+      <div style="font-size: 25px">Getting Root:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>We should always check our <mark>sudo</mark> privileges first.</div>
+      <img src="pictures/obscurity/sudo-l.png" alt="sudo -l" style="width:86%">
+      <div>We are able to run this python script <mark>BetterSSH.py</mark> as root.</div>
+      <br/>
+      <div>Let's see what this script does.</div>
+      <img src="pictures/obscurity/betterssh1.png" alt="betterssh" style="width:68%">
+      <img src="pictures/obscurity/betterssh2.png" alt="betterssh" style="width:68%">
+      <div>So this script prompts us to input our username and password, checks them against <mark>/etc/shadow</mark>, and "logs us in" if successful.</div>
+      <div>What's interesting is that the script puts the contents of <mark>/etc/shadow</mark> in a randomly generated file under <mark>/tmp/SSH</mark> for a split second before removing it.</div>
+      <br/>
+      <div>This is how it works:</div>
+      <img src="pictures/obscurity/whatitdoes.png" alt="betterssh run" style="width:78%">
+      <div>Theoretically if we can copy the file before it gets removed, we can get <mark>root</mark> hash.</div>
+      <div>It is quite difficult to do manually, so let's write a script to do it for us.</div>
+      <br/>
+      <div><mark>exploit.sh</mark>:</div>
+      <img src="pictures/obscurity/exploitsh.png" alt="exploit" style="width:56%">
+      <div>I wrote a simple bash script that will copy every file in the directory <mark>/tmp/SSH</mark> to <mark>/tmp/shadow</mark>.</div>
+      <br/>
+      <div>Then I made the directory <mark>/tmp/SSH</mark> and ran both scripts.</div>
+      <img src="pictures/obscurity/roothash!.png" alt="roothash" style="width:96%">
+      <div>and we got <mark>root</mark>'s hash!</div>
+      <img src="pictures/obscurity/roothashes.png" alt="roothash" style="width:96%">
+      <br/>
+      <div>Let's bring the hash to <mark>hashcat</mark> and try to crack it.</div>
+      <img src="pictures/obscurity/crackedpw.png" alt="cracked" style="width:96%">
+      <div>command: <mark>hashcat64 -m 1800 -O roothash.txt rockyou.txt</mark></div>
+      <div>In a few seconds, <mark>hashcat</mark> cracked the hash, and we get the password <mark>mercedes</mark>.</div>
+      <br/>
+      <div>Now we can <mark>BetterSSH</mark> as <mark>root</mark> with his password.</div>
+      <img src="pictures/obscurity/rooted.png" alt="we are root" style="width:66%">
+      <div>rooted~!</div>
+      <br/>
+      <div style="font-size: 25px">Conclusion:</div>
+      <hr align="left" width="180px">
+      <div><mark>Obscurity</mark> is truly a box like no others, in the sense that everything has to be done manually, and you really have to understand how the scripts work to get to the next step.</div>
+      <div>Every part of it was fun and well designed to me, and it allowed me to practise reading and understanding <mark>python</mark> code.</div>
+      <div>When I did the box previously, <mark>robert</mark> had write access to his directory, and I could simply create my own <mark>BetterSSH.py</mark> and execute it as root.</div>
+      <div>It seems like the creator had patched it this time and I had to do it the intended way, which was way more interesting lol.</div>
+      <div>That's all I have for <mark>Obscurity</mark>, and I hope to see you the next time!</div>
+      <div>oh and hope everyone is having fun during hbl ;)</div>
+      <br/>
+      <div><center>Thank you for reading!</center></div>
+      <div><center>~chiefpie</center></div>
+    </article>
+  </body>
+</html>
