@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <style>
+      hr {
+        background-color: #D2D4D5;
+        height: 2px;
+        border: 0px;
+      }
+      .container{
+        margin-left:120px;
+        margin-right:120px;
+      }
+      div{
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      mark{
+        background-color: #F3CED7;
+        color: #F65B81;
+      }
+      a {
+        color: black;
+        text-decoration: none;
+      }
+      p {
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      .grid-container {
+        grid-template-columns: 75px 75px 75px;
+        grid-template-rows: 20px;
+      }
+    </style>
+    <title>HTB Resolute Writeup</title>
+  </head>
+  <body class="container">
+    <header>
+      <div class="grid-container">
+        <a href="index.html" align="left">| Home |</a><!--
+        --><a href="about.html" align="left"> About |</a><!--
+        --><a href="writeups.html" align="left"> Writeups |</a>
+      </div>
+      <h1 style="color: #384B60"><center>Hack The Box Writeup: Resolute</center></h1>
+      <center><div style="color: #384B60">4/23/2020</div></center>
+      <hr/>
+    </header>
+    <article style="margin-top:60px">
+      <div style="font-size: 25px">Introduction:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <img src="pictures/resolute/profile.png" alt="Resolute" style="width:42%">
+      <div>Hi guys im back with another writeup after procrastinating for a really long time.(do people even read them lmao)</div>
+      <div>Anyways we are going to be hacking <mark>Resolute</mark>, a medium windows machine on <mark>Hack The Box</mark>.</div>
+      <div><mark>Resolute</mark> touches on active directory(really important), and it's one of the more realistic machines on htb.</div>
+      <div>Its ip is <mark>10.10.10.169</mark> and I will add it to <mark>/etc/hosts</mark> as <mark>resolute.htb</mark>.</div>
+      <br/>
+      <div style="font-size: 25px">Nmap:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>Let's start with a <mark>nmap</mark> scan on our target:</div>
+      <br/>
+      <img src="pictures/resolute/nmap.png" alt="Nmap" style="width:78%">
+      <div><mark>nmap</mark> shows numerous open ports, as you would expect on an AD machine.</div>
+      <div>Let's keep this result and enumerate further with <mark>enum4linux</mark>.</div>
+      <br/>
+      <div style="font-size: 25px">Further Enumeration:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <img src="pictures/resolute/enum4linux1.png" alt="e4l" style="width:78%">
+      <img src="pictures/resolute/enum4linux2.png" alt="e4l" style="width:78%">
+      <div>Running the command <mark>enum4linux -a resolute.htb</mark> gives us a detailed report on the target.</div>
+      <div>We can collect some information about the users and password policies.</div>
+      <div>Now we know 1. some usernames, 2. a default password, 3. the account lockout threshold and 4. the domain name.</div>
+      <br/>
+      <div>Let's save the usernames into a file and try to log in with the default password.</div>
+      <img src="pictures/resolute/usernames.png" alt="usernames" style="width:78%">
+      <div>msf time~</div>
+      <br/>
+      <div style="font-size: 25px">Password Spraying:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <img src="pictures/resolute/metasploit_command.png" alt="msf" style="width:58%">
+      <div>Here I will use <mark>metasploit</mark>'s smb login module to password spray.</div>
+      <img src="pictures/resolute/metasploit_result.png" alt="msf" style="width:58%">
+      <div>Trustworthy <mark>metasploit</mark> worked, and we got the valid credentials <mark>MEGABANK\melanie:Welcome123!</mark>.</div>
+      <div>Let's get on the machine!</div>
+      <br/>
+      <div style="font-size: 25px">Getting User:</div>
+      <hr align="left" width="180px">
+      <br>
+      <img src="pictures/resolute/we_are_melanie.png" alt="mel" style="width:78%">
+      <div><mark>Evil-WinRM</mark> allowed us to get a powershell shell on <mark>resolute</mark> as <mark>melanie</mark>.</div>
+      <div>However, <mark>melanie</mark> is unable to read <mark>user.txt</mark>, and that means we have to continue our enumeration.</div>
+      <br/>
+      <div>After some serious excavation, I found an interesting looking powershell transcript.</div>
+      <div>Let's get it downloaded with <mark>Evil-WinRM</mark>'s inbuilt download function.</div>
+      <img src="pictures/resolute/downloaded.png" alt="info" style="width:78%">
+      <div>It says download failed but it's actually downloaded lol.</div>
+      <br/>
+      <div>In the script we see <mark>ryan</mark>'s credentials carelessly left behind in clear text.</div>
+      <img src="pictures/resolute/ryan_creds.png" alt="info" style="width:78%">
+      <div>Now we can use <mark>Evil-WinRM</mark> to log in as <mark>ryan</mark> and hopefully read <mark>user.txt</mark>.</div>
+      <img src="pictures/resolute/we_are_ryan.png" alt="ryan" style="width:78%">
+      <div>user pwned!</div>
+      <br/>
+      <div style="font-size: 25px">Getting Root:</div>
+      <hr align="left" width="180px">
+      <br>
+      <img src="pictures/resolute/dnsadmin.png" alt="dnsadmin" style="width:78%">
+      <div>I checked the groups that ryan belongs to, and realised that he is under the group <mark>DnsAdmins</mark>.</div>
+      <div>Googling it brings us to this page: <mark>https://medium.com/techzap/dns-admin-privesc-in-active-directory-ad-windows-ecc7ed5a21a2</mark> which contains a detailed guide on dnsadmin privesc.</div>
+      <div>As dnsadmin, <mark>ryan</mark> is able to load arbitrary DLLs on the DNS Server, and run it with <mark>system</mark> privileges.</div>
+      <br/>
+      <div>I followed the guide and generated my unstaged payload with <mark>msfvenom</mark>:</div>
+      <img src="pictures/resolute/payload.png" alt="payload" style="width:58%">
+      <div>Now let's host the payload with <mark>smbserver.py</mark>.</div>
+      <img src="pictures/resolute/smbserver.png" alt="smbserver" style="width:58%">
+      <div>Finally, we can load the malicious DLL on the target machine and reset dns to execute it.</div>
+      <div>Oh and don't forget to have your listener set up!</div>
+      <img src="pictures/resolute/success.png" alt="success" style="width:78%">
+      <div>We can see that the server talked back to us.</div>
+      <div>That's a good sign, let's check our listener...</div>
+      <img src="pictures/resolute/rooted.png" alt="rooted" style="width:58%">
+      <div>aaaaand we are system!</div>
+      <br/>
+      <div style="font-size: 25px">Conclusion:</div>
+      <hr align="left" width="180px">
+      <div><mark>Resolute</mark> is a realistic box that highlights the common bad practices of employees and system admins.</div>
+      <div>These practices allow the attacker to easily compromise a user account, and get a foothold in the domain.(never use default passwords!!)</div>
+      <div>Rooting this machine was pretty difficult, and I wouldn't be able to do it if I had not seen the guide. Nevertheless, I still enjoyed following along and applying the knowledge learnt.(pw references hmmm)</div>
+      <div>That's all I have for <mark>Resolute</mark>. Quoting a friend, "hope everyone is flourishing under hbl".</div>
+      <br/>
+      <div><center>Thank you for reading!</center></div>
+      <div><center>~chiefpie</center></div>
+    </article>
+  </body>
+</html>
