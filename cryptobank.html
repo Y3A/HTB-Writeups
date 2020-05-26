@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <style>
+      hr {
+        background-color: #D2D4D5;
+        height: 2px;
+        border: 0px;
+      }
+      .container{
+        margin-left:120px;
+        margin-right:120px;
+      }
+      div{
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      mark{
+        background-color: #F3CED7;
+        color: #F65B81;
+      }
+      a {
+        color: black;
+        text-decoration: none;
+      }
+      p {
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      .grid-container {
+        grid-template-columns: 75px 75px 75px;
+        grid-template-rows: 20px;
+      }
+    </style>
+    <title>Vulnhub CryptoBank Writeup</title>
+  </head>
+  <body class="container">
+    <header>
+      <div class="grid-container">
+        <a href="index.html" align="left">| Home |</a><!--
+        --><a href="about.html" align="left"> About |</a><!--
+        --><a href="writeups.html" align="left"> Writeups |</a>
+      </div>
+      <h1 style="color: #384B60"><center>Vulnhub Writeup: CryptoBank</center></h1>
+      <center><div style="color: #384B60">5/23/2020</div></center>
+      <hr/>
+    </header>
+    <article style="margin-top:60px">
+      <div style="font-size: 25px">Introduction:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <img src="pictures/cryptobank/problem_statement.png" alt="cryptobank" style="width:100%">
+      <div>Hello im back with another writeup! Today we will be hacking <mark>CryptoBank</mark>, a very well designed box by <mark>emaragkos</mark>.</div>
+      <div>Our mission will be to find the bitcoin wallet of the bank, which is stored in <mark>root</mark>'s home directory.</div>
+      <div>Analysing the problem statement, there might be some sort of <mark>WAF</mark> or <mark>IDS</mark> present, so let's keep that in mind.</div>
+      <div>Its ip in this writeup will be <mark>192.168.1.250</mark> and I will add it to <mark>/etc/hosts</mark> as <mark>cryptobank.local</mark>.</div>
+      <div>Note: There might be some difficulties accessing the login page if we don't give it a hostname.</div>
+      <br/>
+      <div style="font-size: 25px">Nmap:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>Let's start with a <mark>nmap</mark> scan on our target:</div>
+      <br/>
+      <img src="pictures/cryptobank/nmap.png" alt="Nmap" style="width:78%">
+      <div>Analysing our <mark>nmap</mark> result, we got <mark>ssh</mark> on port 22 and <mark>http</mark> on port 80.</div>
+      <div>We will now proceed to web enumeration.</div>
+      <br/>
+      <div style="font-size: 25px">Web Enumeration:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <img src="pictures/cryptobank/webpage.png" alt="homepage" style="width:100%">
+      <br/>
+      <div>Navigating to port 80, we see a nice looking home page of a bank.</div>
+      <div>Let's scroll down further and click around to see if we can collect any information.</div>
+      <br/>
+      <img src="pictures/cryptobank/team_snapshot.png" alt="devteam" style="width:100%">
+      <div>Most of the links are useless, but we do find a login page and some information about the people working in this bank.</div>
+      <div>This is definitely good information, and we should store it in a file for future use.</div>
+      <img src="pictures/cryptobank/namelist.png" alt="names" style="width:80%">
+      <div>Firstname dot lastname is a common username format for companies, let's add that in too.</div>
+      <br/>
+      <div>Login Page:</div>
+      <img src="pictures/cryptobank/login_page.png" alt="login" style="width:80%">
+      <div>We can see that registration is closed and <mark>WAF</mark> is indeed present.</div>
+      <div>I don't feel like attacking the login page as of now, so let's run a directory scan to see if we can collect more information.</div>
+      <br/>
+      <div>ffuf scan:</div>
+      <img src="pictures/cryptobank/root_dir_discovery.png" alt="dirbust" style="width:80%">
+      <div>We do find some directories. Let's check them out.</div>
+      <img src="pictures/cryptobank/assets.png" alt="assets" style="width:50%">
+      <div>Nothing too interesting here.</div>
+      <img src="pictures/cryptobank/basic_auth.png" alt="development" style="width:80%">
+      <div><mark>/development</mark> requires basic auth and <mark>admin:admin</mark> didn't work, so that's a dead end too.</div>
+      <div>However we do know that the developer of this bank is <mark>Julius</mark>, so we can come back later once we find out his password.</div>
+      <br/>
+      <div>I also found a phpinfo page, which contains some useful information.</div>
+      <img src="pictures/cryptobank/php_info.png" alt="phpinfo" style="width:80%">
+      <img src="pictures/cryptobank/interesting_info.png" alt="info" style="width:60%">
+      <div>The phpinfo page tells us about the server-admin and the document root, which is pretty useful when we are reading files.</div>
+      <br/>
+      <div>After checking all the directories, we still don't have any information related to the login page.</div>
+      <div>Not the best situation to be in, but let's just try to attack it now.</div>
+      <img src="pictures/cryptobank/burp_request.png" alt="request" style="width:80%">
+      <div>Bruteforcing a page with <mark>WAF</mark> isn't the smartest move, so I shall just send the login request over to <mark>sqlmap</mark>.</div>
+      <br/>
+      <img src="pictures/cryptobank/databases.png" alt="dbs" style="width:60%">
+      <div>After some fuzzing, <mark>sqlmap</mark> identified that the login page is vulnerable to <mark>time-based blind sql injection</mark>, and it was able to dump out the databases.</div>
+      <br/>
+      <div>Let's go ahead and extract user credentials.</div>
+      <img src="pictures/cryptobank/tables.png" alt="T" style="width:60%">
+      <img src="pictures/cryptobank/columns.png" alt="C" style="width:60%">
+      <img src="pictures/cryptobank/dumped_data.png" alt="dumped_data" style="width:60%">
+      <div>Great! Now we have a list of usernames and passwords of registered users.</div>
+      <br/>
+      <div>Adding to our list:</div>
+      <img src="pictures/cryptobank/website_users.png" alt="users" style="width:40%">
+      <div>Seems like this bank uses firstname dot lastname and firstname+lastname as a naming convention.</div>
+      <br/>
+      <div>Let's log in as William to take a look just because he has the first account.</div>
+      <img src="pictures/cryptobank/logged_in.png" alt="logged_in" style="width:70%">
+      <div>Hmmm if we had an account we will be able to take all of his money.</div>
+      <div>We can get him in debt too but that seems pretty pointless as of now.</div>
+      <div>Let's just leave this account in peace and go back to <mark>/development</mark>.</div>
+      <br/>
+      <div>Fortunately the credentials <mark>julius.b:wJWm4CgV26</mark> worked and we did not have to bruteforce it.</div>
+      <div>The page itself only has a message telling us that it is for development purpose, so let's run <mark>ffuf</mark> again.</div>
+      <img src="pictures/cryptobank/dev_dir_discovery.png" alt="dev_dir" style="width:80%">
+      <div>Remember to add the header!</div>
+      <div>We see <mark>/backups</mark> and <mark>/tools</mark>.</div>
+      <br/>
+      <div>Backups:</div>
+      <img src="pictures/cryptobank/backups.png" alt="backups" style="width:60%">
+      <div>Clicking on <mark>home/</mark> brings us to a backup homepage that looks exactly the same as the landing page.</div>
+      <div>Doesn't seem tooooo interesting, let's check <mark>/tools</mark>.</div>
+      <br/>
+      <div>Tools:</div>
+      <img src="pictures/cryptobank/tools.png" alt="tools" style="width:70%">
+      <div>???</div>
+      <div>Not a good idea at all to leave such tools lying around.</div>
+      <div>Let's take a look each of them.</div>
+      <br/>
+      <div>Execute a command:</div>
+      <img src="pictures/cryptobank/command_execution.png" alt="command_exe" style="width:80%">
+      <div>View a system file:</div>
+      <img src="pictures/cryptobank/view_file.png" alt="view_file" style="width:80%">
+      <div>Upload a file:</div>
+      <img src="pictures/cryptobank/upload_file.png" alt="file_upload" style="width:80%">
+      <div>File upload seems the easiest to me so I'll choose it.</div>
+      <br>
+      <div>I thought it was going to be an easy one but...</div>
+      <img src="pictures/cryptobank/file_upload_blocked.png" alt="blocked" style="width:80%">
+      <div>the <mark>WAF</mark> appeared and did a great job at identifying my webshell.</div>
+      <div>I tried my best to evade it by modifying the file-extension and file-type but still failed to get pass it.</div>
+      <div>That's enough, let's try the view_file function instead.</div>
+      <br/>
+      <div>Let's check if <mark>directory traversal</mark> exists.</div>
+      <img src="pictures/cryptobank/dir_traverse.png" alt="traverse_attempt" style="width:100%">
+      <div>...of course its blocked.</div>
+      <br/>
+      <div>After a while of fuzzing, I realised that this function calls files from the root directory, and hence there is no need for <mark>../</mark>s.</div>
+      <div>Let's try to view the file upload function and maybe we can get to inspect the php code.</div>
+      <img src="pictures/cryptobank/file_inclusion_spotted.png" alt="LFI" style="width:100%">
+      <div>Even better, the php code is executed!!</div>
+      <div>However we don't control any files on the system as of now, so we can't do much with this.</div>
+      <div>Let's test for <mark>remote file inclusion</mark>.</div>
+      <br/>
+      <div>RFI:</div>
+      <img src="pictures/cryptobank/rfi_confirmed.png" alt="rfi" style="width:100%">
+      <div>FINALLY we found a vulnerability where we can utilise to get on the machine.</div>
+      <br/>
+      <div>I hosted a <mark>php reverse-shell</mark> and viewed(executed) it.</div>
+      <img src="pictures/cryptobank/rev_shell.png" alt="shell" style="width:80%">
+      <div>We are on machine and indeed in the root directory.</div>
+      <br/>
+      <img src="pictures/cryptobank/flag1.png" alt="flag" style="width:60%">
+      <div>Surprisingly we can read the user flag as <mark>www-data</mark>, so let's grab that.</div>
+      <br>
+      <div style="font-size: 25px">Getting Root:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>After looking at <mark>/etc/passwd</mark>, we found a user <mark>cryptobank</mark> on the machine.</div>
+      <div>Let's add that to our users list too.</div>
+      <img src="pictures/cryptobank/all_users.png" alt="users" style="width:50%">
+      <div>Who knows we might need it someday.</div>
+      <br/>
+      <div>I ran <mark>linpeas.sh</mark> and found some password hashes.</div>
+      <img src="pictures/cryptobank/linpeas_results.png" alt="linpeas" style="width:90%">
+      <div><mark>$2$</mark> is bcrypt, which is a pain to crack.</div>
+      <div>Instead of cracking them, let's enumerate the directory where we found them.</div>
+      <br/>
+      <div><mark>/var/www/cryptobank</mark>:</div>
+      <img src="pictures/cryptobank/interesting_files.png" alt="files" style="width:90%">
+      <div>The firewall is found in the directory <mark>/ninjafirewall</mark>.</div>
+      <br/>
+      <div>Let's analyse the php code to see if we can find any credentials.</div>
+      <img src="pictures/cryptobank/options_creds.png" alt="creds" style="width:90%">
+      <div>In <mark>/conf/options.php</mark> we find the username of the account, <mark>administrator</mark>.</div>
+      <br/>
+      <div>In <mark>/pro2-reset-is-now-hidden.php</mark> we find some info on how to reset the password for <mark>ninjafirewall</mark>.</div>
+      <img src="pictures/cryptobank/reset_php_msg.png" alt="reset" style="width:90%">
+      <div>Lazy developers simply renaming the file instead of deleting it.</div>
+      <img src="pictures/cryptobank/reset_php_info.png" alt="reset" style="width:90%">
+      <div>Hmmm username between 6 and 20 characters and starts with any word character..."administrator" sounds just right.</div>
+      <img src="pictures/cryptobank/pass_rules.png" alt="reset" style="width:90%">
+      <div>So the script will randomly generate a 10 characters long password as our new password.</div>
+      <br/>
+      <div>Navigating to the directory, we see a login page.</div>
+      <img src="pictures/cryptobank/login_page_admin.png" alt="login_firewall" style="width:70%">
+      <div>However we are able to visit the password reset page without logging in.(lazy devs again oops)</div>
+      <img src="pictures/cryptobank/password_reset.png" alt="pw_reset" style="width:90%">
+      <div>We know that the username is <mark>administrator</mark>, so let's reset the password.</div>
+      <img src="pictures/cryptobank/resetted.png" alt="reset" style="width:90%">
+      <div>and we got the new password!</div>
+      <br>
+      <div>We can now log in as administrator and enumerate the management page of the firewall.</div>
+      <img src="pictures/cryptobank/manage_firewall.png" alt="manage" style="width:90%">
+      <div>Seems like we were supposed to find the page and turn the firewall off before uploading our shell...</div>
+      <div>But since we already got a shell, this isn't that useful anymore.</div>
+      <br/>
+      <div>Let's go back to our shell and check for listening ports.</div>
+      <img src="pictures/cryptobank/ports.png" alt="ports" style="width:90%">
+      <div>We've got <mark>dns</mark>, <mark>ssh</mark>, <mark>http</mark>, <mark>mysql</mark> and a weird port listening at 8983 that is not even on localhost.</div>
+      <br/>
+      <div>If we check <mark>ifconfig</mark>, we will see a docker interface at <mark>172.17.0.0/16</mark>.</div>
+      <img src="pictures/cryptobank/docker.png" alt="docker" style="width:90%">
+      <div>We can't directly access that port from our attacking machine, so let's do a <mark>port forward</mark>.</div>
+      <br>
+      <img src="pictures/cryptobank/chisel_server.png" alt="server" style="width:90%">
+      <img src="pictures/cryptobank/chisel_client.png" alt="client" style="width:90%">
+      <div>Here im using <mark>chisel</mark> to create a <mark>tcp tunnel</mark>, but other tools will be fine too.</div>
+      <br/>
+      <div>Now we see that our attacking machine is listening on port 8983 too.</div>
+      <img src="pictures/cryptobank/tunnelled.png" alt="success" style="width:90%">
+      <div>Google tells us that port 8983 is the default port for <mark>Solr</mark>, an open-source enterprise-search platform.</div>
+      <div>Let's run an <mark>nmap</mark> scan against this port.</div>
+      <br/>
+      <div style="font-size: 25px">Nmap:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <img src="pictures/cryptobank/nmap_solr.png" alt="nmap" style="width:90%">
+      <div>It is indeed <mark>Solr</mark>.</div>
+      <div><mark>nmap</mark> did not tell us the version of <mark>Solr</mark> though, so let's check the page out manually.</div>
+      <br/>
+      <div>Solr Admin:</div>
+      <img src="pictures/cryptobank/solr_portal.png" alt="solr" style="width:90%">
+      <div>We see that the server is running on version <mark>8.1.1</mark>.</div>
+      <br/>
+      <div>Before we dive into more enumeration, let's check searchsploit first.</div>
+      <img src="pictures/cryptobank/searchsploit.png" alt="searchsploit" style="width:90%">
+      <div>The version 8.2.0 RCE might be useful.</div>
+      <div>We can mirror it and try the script.</div>
+      <img src="pictures/cryptobank/rce_found.png" alt="rce" style="width:90%">
+      <div>The script did work, and we have code execution on the server now.</div>
+      <br/>
+      <div>Let's use it to get a reverse shell on our other shell.</div>
+      <img src="pictures/cryptobank/rev_shell_two.png" alt="rev" style="width:90%">
+      <img src="pictures/cryptobank/rev_shell_two_received.png" alt="rev" style="width:90%">
+      <div>and we get a shell!</div>
+      <div>If we do the tty magic we can see that we are the user <mark>solr</mark>.</div>
+      <br/>
+      <div>Since we are a proper user, let's check our sudo privileges.</div>
+      <img src="pictures/cryptobank/sudoL.png" alt="sudo" style="width:90%">
+      <div>No password required for all???</div>
+      <div>Let's get a root shell straightaway!</div>
+      <img src="pictures/cryptobank/wheresmysudo.png" alt="sudo what" style="width:70%">
+      <div>Of course it wouldn't be so easy lmao...</div>
+      <div>Everything requires a password.</div>
+      <br/>
+      <div>After some trial and error, we guessed the weak password:<mark>solr</mark>.</div>
+      <img src="pictures/cryptobank/rooted.png" alt="rooted" style="width:70%">
+      <div>and finally, we have rooted the machine and got the bitcoin wallet.</div>
+      <br/>
+      <div>Afterwards I learnt from the creator of the machine that I wasn't able to sudo without a password because the last sudo rule takes precedence over the previous ones.</div>
+      <div>Eventhough it seemed like we could sudo without a password, we actually do need to provide the password for all sudo actions.</div>
+      <br/>
+      <div style="font-size: 25px">Conclusion:</div>
+      <hr align="left" width="180px">
+      <div>CryptoBank is an amazing machine, and the creator really put in a lot of effort from designing the webapp to crafting the path to root.</div>
+      <div>I love the fact that there are quite a lot of ways to get on the box, and it is heavy on enumeration.</div>
+      <div>I think most people got a shell on the box by finding a <mark>.git</mark> directory, and then recreating it to find out about the firewall/a way to execute commands with the "execute a command" function. That's definitely more fun than exploiting the <mark>RFI</mark> imo.</div>
+      <div>Nevertheless we still explored the firewall and the password reset function, so we're not really missing out much there :p.</div>
+      <div>That's all for today...it's a pretty long writeup lol.</div>
+      <div>Thanks again to the creator of the machine <mark>@emaragkos</mark> and Vulnhub for hosting it. Will definitely recommend trying this machine.</div>
+      <br/>
+      <div><center>Thank you for reading!</center></div>
+      <div><center>~chiefpie</center></div>
+    </article>
+  </body>
+</html>
