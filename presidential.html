@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <style>
+      hr {
+        background-color: #D2D4D5;
+        height: 2px;
+        border: 0px;
+      }
+      .container{
+        margin-left:120px;
+        margin-right:120px;
+      }
+      div{
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      mark{
+        background-color: #F3CED7;
+        color: #F65B81;
+      }
+      a {
+        color: black;
+        text-decoration: none;
+      }
+      p {
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      .grid-container {
+        grid-template-columns: 75px 75px 75px;
+        grid-template-rows: 20px;
+      }
+    </style>
+    <title>Vulnhub Presidential Writeup</title>
+  </head>
+  <body class="container">
+    <header>
+      <div class="grid-container">
+        <a href="index.html" align="left">| Home |</a><!--
+        --><a href="about.html" align="left"> About |</a><!--
+        --><a href="writeups.html" align="left"> Writeups |</a>
+      </div>
+      <h1 style="color: #384B60"><center>Vulnhub Writeup: Presidential</center></h1>
+      <center><div style="color: #384B60">7/18/2020</div></center>
+      <hr/>
+    </header>
+    <article style="margin-top:60px">
+      <div style="font-size: 25px">Introduction:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <img src="pictures/presidential/problem-statement.png" alt="presidential" style="width:100%">
+      <div>Hello im back with another writeup! Today we will be hacking <mark>Presidential</mark>, a fun box by <mark>bootlesshacker</mark> that stresses on enumeration.</div>
+      <div>The creator of this box rated it medium/hard, but I feel that it is relatively straightforward as long as you enumerate carefully.</div>
+      <div>I've already discovered its IP to be <mark>192.168.1.217</mark>, so let's begin hacking!</div>
+      <br/>
+      <div style="font-size: 25px">Nmap:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>As always, let's start with a <mark>nmap</mark> scan on our target:</div>
+      <br/>
+      <img src="pictures/presidential/nmap.png" alt="Nmap" style="width:78%">
+      <div>Analysing our <mark>nmap</mark> result, we got <mark>ssh</mark> on port 2082 and <mark>http</mark> on port 80.</div>
+      <div>Let's take a look at port 80.</div>
+      <br/>
+      <div style="font-size: 25px">Web Enumeration:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <img src="pictures/presidential/webpage.png" alt="homepage" style="width:100%">
+      <br/>
+      <div>Navigating to port 80, we see the home page of a voting platform.</div>
+      <div>What immediately stood out to me was the leaked hostname in the email, <mark>votenow.local</mark>.</div>
+      <img src="pictures/presidential/hostname.png" alt="hostname" style="width:30%">
+      <div>We can append it to <mark>/etc/hosts</mark> before visiting <mark>votenow.local</mark> again.</div>
+      <br/>
+      <div>The links in this page just directs us to <mark>#</mark>, and there isn't any useful information apart from the names of 2 candidates.</div>
+      <div>Let's bruteforce directories with <mark>ffuf</mark>.</div>
+      <img src="pictures/presidential/ffuf.png" alt="ffuf" style="width:100%">
+      <div>We see an <mark>about.html</mark> page, which allows us to get some names.</div>
+      <img src="pictures/presidential/team-members.png" alt="team-members" style="width:100%">
+      <div>Usernames can be generated from these names, which may be useful if we are attempting a bruteforce attack.</div>
+      <img src="pictures/presidential/usernames.png" alt="ffuf" style="width:70%">
+      <div>We also find a <mark>config.php</mark> page which is empty.</div>
+      <br/>
+      <div>Service websites usually won't have their management page on the main site, so let's also run a subdomain bruteforce.</div>
+      <img src="pictures/presidential/subdomain-found.png" alt="ffuf" style="width:100%">
+      <div>and we find a subdomain, <mark>datasafe.votenow.local</mark>.</div>
+      <div>Add that to hosts and we can visit it.</div>
+      <br/>
+      <div>datasafe.votenow.local:</div>
+      <img src="pictures/presidential/php-myadmin.png" alt="login" style="width:100%">
+      <div>Great! We discovered a <mark>phpmyadmin</mark> login page.</div>
+      <br/>
+      <div>I tried some common passwords with the discovered usernames but to no avail.</div>
+      <div>Luckily, we have <mark>ffuf</mark> running in the background with a bigger wordlist.</div>
+      <img src="pictures/presidential/deeper-ffuf.png" alt="ffuf" style="width:100%">
+      <div>Navigating to <mark>http://votenow.local/config.php.bak</mark>, we still find an empty page.</div>
+      <div>However when we view the source code of the page, we find a set of database credentials.</div>
+      <img src="pictures/presidential/config-php-bak.png" alt="creds" style="width:30%">
+      <div><mark>votebox:casoj3FFASPsbyoRP</mark></div>
+      <br/>
+      <div>Now we can log in as votebox.</div>
+      <img src="pictures/presidential/logged-in.png" alt="loggedin" style="width:100%">
+      <div>If we enumerate the <mark>mysql</mark> database, we will be able to find another set of credentials for the user <mark>admin</mark>.</div>
+      <img src="pictures/presidential/admin-pass-hash.png" alt="admin" style="width:70%">
+      <div>Cracking the hash gives us <mark>admin</mark>'s password, <mark>Stella</mark>.</div>
+      <br/>
+      <div><mark>admin</mark> can't log in to <mark>phpmyadmin</mark>, so I'm guessing that he is a user on the box.</div>
+      <img src="pictures/presidential/ssh-failed.png" alt="admin" style="width:70%">
+      <div>However when we try to <mark>SSH</mark> in, we realise that the box only accepts authentication by key.</div>
+      <div>Let's go back to enumerate <mark>phpmyadmin</mark>.</div>
+      <br/>
+      <div style="font-size: 25px">Getting User:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>Checking the version information tells us that the server is running version <mark>4.8.1</mark> of <mark>phpmyadmin</mark>.</div>
+      <div>This version is vulnerable to a <mark>Local File Inclusion</mark> attack.</div>
+      <img src="pictures/presidential/LFI-spotted.png" alt="LFI" style="width:100%">
+      <div>If we url-encode "?" twice to become "%253f", we can bypass the server side whitelist check.</div>
+      <div>As proof of concept, we read the <mark>/etc/passwd</mark> file, and <mark>admin</mark> is indeed a user on the box.</div>
+      <div>Now let's try to use this vulnerability to gain <mark>RCE</mark>.</div>
+      <br/>
+      <div><mark>phpmyadmin</mark> allows us to execute <mark>SQL</mark> commands, so we can "select" arbitrary php code.</div>
+      <img src="pictures/presidential/setting_up_rce.png" alt="rce" style="width:100%">
+      <div>The php code is now logged in our session file.</div>
+      <img src="pictures/presidential/RCE.png" alt="rce" style="width:100%">
+      <div>When we include our session file, we can see that the php code got executed successfully.</div>
+      <br/>
+      <div>We have achieved <mark>remote code execution</mark>, and can now hopefully get a shell.</div>
+      <img src="pictures/presidential/getshell-set_up.png" alt="rce" style="width:100%">
+      <img src="pictures/presidential/getshell.png" alt="rce" style="width:100%">
+      <div>Replace the php-info payload with a <mark>metasploit</mark> payload, and we get a <mark>meterpreter</mark> shell on the box as <mark>apache</mark>.</div>
+      <div>However you should take into consideration that this hangs the <mark>mysql</mark> server. It is more recommended to upload a one liner web shell and then spawning a reverse shell with the operating system.</div>
+      <br/>
+      <div>Anyways we can <mark>su</mark> to <mark>admin</mark> now, and read <mark>user.txt</mark>.</div>
+      <img src="pictures/presidential/user-pwned.png" alt="user" style="width:60%">
+      <div>User pwned!</div>
+      <br/>
+      <div style="font-size: 25px">Getting Root:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>As usual, we run <mark>linpeas.sh</mark> on the box.</div>
+      <img src="pictures/presidential/permissions.png" alt="permissions" style="width:70%">
+      <img src="pictures/presidential/writable-binary.png" alt="permissions" style="width:70%">
+      <div>We find an interesting binary called <mark>tarS</mark> which we can write to, and has <mark>cap_dac_read_search</mark> capability.</div>
+      <div>This means that the binary has permissions to read any files on the box.</div>
+      <br/>
+      <div>When we run it, we realise that it looks identical to <mark>tar</mark>, a binary which allows us to compress and decompress files.</div>
+      <img src="pictures/presidential/tarSvstar.png" alt="tarS" style="width:70%">
+      <div>Since <mark>tarS</mark> can read any files, we can use it to compress <mark>/etc/shadow</mark>.</div>
+      <img src="pictures/presidential/shadow-compressed.png" alt="tarS" style="width:70%">
+      <div>then decompress it</div>
+      <img src="pictures/presidential/roothashes.png" alt="tarS" style="width:70%">
+      <div>Sweet! We have <mark>root</mark>'s hashes now.</div>
+      <div>However, I wasn't able to crack it with multiple wordlists, so we have to find another way to get root.</div>
+      <br/>
+      <div>Let's compress <mark>root</mark>'s home directory and see what we can find.</div>
+      <img src="pictures/presidential/rootkeys.png" alt="keys" style="width:70%">
+      <div>Now we have <mark>root</mark>'s <mark>SSH</mark> private keys.</div>
+      <br/>
+      <div>We can transfer it to our own machine and try to crack the password.</div>
+      <img src="pictures/presidential/nopassword.png" alt="nopass" style="width:70%">
+      <div>oh well... seems like there's nothing to be cracked here.</div>
+      <div>That means we can just <mark>SSH</mark> in as <mark>root</mark>.</div>
+      <img src="pictures/presidential/rooted.png" alt="nopass" style="width:70%">
+      <div>rooted~!</div>
+      <br/>
+      <div style="font-size: 25px">Conclusion:</div>
+      <hr align="left" width="180px">
+      <div>Presidential is a great box that teaches good enumeration practises and linux file capabilities.</div>
+      <div>I enjoyed discovering then exploiting the <mark>phpmyadmin</mark> vulnerability the most.</div>
+      <div>However, the path to <mark>root</mark> seemed a bit too easy, and it will probably be more fun if we were presented a binary where we could tweak to utilise the arbitrary read capability.</div>
+      <div>Nevertheless it is still a well made box, and I want to thank <mark>bootlesshacker</mark> for creating it and <mark>Vulnhub</mark> for hosting it.</div>
+      <div>That's all for this writeup, and I hope you found it useful!</div>
+      <br/>
+      <div><center>Thank you for reading!</center></div>
+      <div><center>~chiefpie</center></div>
+    </article>
+  </body>
+</html>
