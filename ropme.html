@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <style>
+      hr {
+        background-color: #D2D4D5;
+        height: 2px;
+        border: 0px;
+      }
+      .container{
+        margin-left:120px;
+        margin-right:120px;
+      }
+      div{
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      mark{
+        background-color: #F3CED7;
+        color: #F65B81;
+      }
+      a {
+        color: black;
+        text-decoration: none;
+      }
+      p {
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      .grid-container {
+        grid-template-columns: 75px 75px 75px;
+        grid-template-rows: 20px;
+      }
+    </style>
+    <title>HTB Ropme Writeup</title>
+  </head>
+  <body class="container">
+    <header>
+      <div class="grid-container">
+        <a href="index.html" align="left">| Home |</a><!--
+        --><a href="about.html" align="left"> About |</a><!--
+        --><a href="writeups.html" align="left"> Writeups |</a>
+      </div>
+      <h1 style="color: #384B60"><center>Challenge Writeup: Ropme</center></h1>
+      <center><div style="color: #384B60">8/20/2020</div></center>
+      <hr/>
+    </header>
+    <article style="margin-top:60px">
+      <div style="font-size: 25px">Introduction:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <img src="pictures/ropme/Ropme.png" alt="ropme" style="width:90%">
+      <div>Hello im back with another writeup! This writeup will not be on a box, but instead on a pwn challenge on <mark>Hack The Box</mark> called <mark>Ropme</mark>.</div>
+      <div>I've just started learning pwn, so this writeup might might not be 100% accurate. Feel free to contact me if you find a mistake.</div>
+      <div>I'll be talking through my thought process when solving this. If it is unclear at some parts, you can watch <a href="https://www.youtube.com/watch?v=6S4A2nhHdWg" style="color: blue;" target="_blank">this</a> video by awesome IppSec.</div>
+      <div>Let's start hacking~</div>
+      <br/>
+      <div style="font-size: 25px">Binary Analysis:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>The first things I do when I get a binary is to play around with it, check its type, architecture and protection.</div>
+      <div>I will also use <mark>Ghidra</mark> to decompile it if the assembly is long and confusing.</div>
+      <br/>
+      <div>After we unzip the zip-file, we see a single binary <mark>ropme</mark>.</div>
+      <img src="pictures/ropme/test-input.png" alt="play" style="width:50%">
+      <div>Upon execution, it prints a sentence to standard output and starts hanging.</div>
+      <div>If we type a random string, the binary just exits.</div>
+      <br/>
+      <div><mark>file</mark> and <mark>checksec</mark>:</div>
+      <img src="pictures/ropme/checksec.png" alt="check" style="width:80%">
+      <div>We can see that the binary is a 64-bit ELF file in little-endian order.</div>
+      <div>It also has <mark>Partial RELRO</mark> and <mark>NX</mark> enabled, which means that we cannot execute shellcode on the stack.</div>
+      <div>Let's check it out in <mark>gdb</mark>.</div>
+      <br/>
+      <div><mark>gdb</mark>:</div>
+      <img src="pictures/ropme/dangerous_fgets.png" alt="check" style="width:80%">
+      <div>I've installed the <mark>gef</mark> extension for <mark>gdb</mark> to make it easier to use.</div>
+      <div>The assembly is fairly simple, and we can figure out the vulnerability with some analysis.</div>
+      <div>Only 64 bytes of buffer space is allocated to <mark>rdi</mark>, but we allowed <mark>fgets</mark> to read up to 500 bytes from standard input.</div>
+      <div>This will obviously overflow the buffer, and overwrite the return pointer stored on the stack.</div>
+      <br/>
+      <div>Let's verify our hypothesis by sending in 100 bytes of pattern character.</div>
+      <img src="pictures/ropme/pattern_create.png" alt="check" style="width:80%">
+      <div><mark>gdb</mark> can assist us in generating the pattern.</div>
+      <img src="pictures/ropme/offset.png" alt="check" style="width:70%">
+      <div>The binary indeed crashed with a segmentation fault, and we can overwrite the return address after 72 bytes.</div>
+      <div>With <mark>NX</mark> enabled, we can't straight away execute shellcode on the stack and have to find another way of getting code execution.</div>
+      <div>We can do that by calling <mark>system</mark> with an argument stored in <mark>rdi</mark>.</div>
+      <div>However since <mark>ASLR</mark> is most probably enabled, we have to first leak the memory address of a known function during runtime, so that we can calculate the offset due to <mark>ASLR</mark>.</div>
+      <div>Once we know the offset, we can add it to the address of any function we want to call in libc, and that will also be its address during runtime.</div>
+      <br/>
+      <div>Let's leak the memory address of <mark>puts</mark>, by calling <mark>puts</mark> and letting it take its <mark>GOT</mark> address as an argument.</div>
+      <div>We can call <mark>puts</mark> or <mark>printf</mark> on any other function's <mark>GOT</mark> address and it will work just fine.</div>
+      <div>The idea is just to print out the memory address of the function at runtime to standard output so we can access it.</div>
+      <img src="pictures/ropme/addresses_puts.png" alt="leak_puts" style="width:70%">
+      <div>The <mark>PLT</mark> and <mark>GOT</mark> address of functions can be found with <mark>objdump -D</mark>.</div>
+      <div>We can also just use <mark>pwntools</mark> to automatically find them, as I will show in the exploit code later on.</div>
+      <br/>
+      <div>In order to get the <mark>GOT</mark> address of <mark>puts</mark> into <mark>rdi</mark>, we have to utilise a gadget.</div>
+      <img src="pictures/ropme/pop_gadget.png" alt="leak_puts" style="width:50%">
+      <div>In this case we can use the <mark>pop rdi</mark> gadget to do so.</div>
+      <div>Now we are all set, and can start crafting the first stage of the exploit.</div>
+      <br/>
+      <div style="font-size: 25px">Stage 1: Leaking Libc Base</div>
+      <hr align="left" width="360px">
+      <br/>
+      <div>exploit code:</div>
+      <img src="pictures/ropme/script_part1.png" alt="leak_puts" style="width:80%">
+      <div>Here I used <mark>pwntools</mark> to automatically find the addresses of functions we need.</div>
+      <div>Let's try it on our local binary.</div>
+      <img src="pictures/ropme/leaking_local.png" alt="leak_puts" style="width:60%">
+      <div>The leak works! Now we can try it on the remote server.</div>
+      <img src="pictures/ropme/leaking_remote.png" alt="leak_puts" style="width:60%">
+      <div>Great, now we have access to the address of <mark>puts</mark> at runtime.</div>
+      <br/>
+      <div>Before we can start calculating the libc base address, we must take into consideration that the remote server might be using a different libc from us.</div>
+      <div>We can use <a href="https://libc.blukat.me/" style="color: blue;" target="_blank">this</a> website to find out the libc that our target is using and download it.</div>
+      <img src="pictures/ropme/libc_download.png" alt="download" style="width:80%">
+      <div>Both libcs work. I'll download the 0ubuntu10 version.</div>
+      <div>Now we can calculate the libc base address.</div>
+      <br/>
+      <div>Since we have access to the address of <mark>puts</mark>, we can use it to minus the address of <mark>puts</mark> in libc.</div>
+      <div>That is the libc base address.</div>
+      <img src="pictures/ropme/manual_way.png" alt="manual_way" style="width:80%">
+      <div>This is the manual way of getting the addresses we need to form the payload <mark>system("/bin/sh")</mark>.</div>
+      <div>We can do it automatically with pwntools too.</div>
+      <img src="pictures/ropme/script_full.png" alt="script_full" style="width:70%">
+      <div>Now we have all we need, and we theoretically can get a shell now.</div>
+      <div>Let's try it on the remote server directly.</div>
+      <br/>
+      <div style="font-size: 25px">Stage 2: Getting Shell</div>
+      <hr align="left" width="360px">
+      <br/>
+      <div>exploit results:</div>
+      <img src="pictures/ropme/error.png" alt="error" style="width:70%">
+      <div>We don't get a shell, but instead get a weird error message that also appears when you type garbage in the terminal.</div>
+      <div>That's good news for us, because we know that our <mark>system</mark> address is right and <mark>/bin/sh</mark> is the one failing.</div>
+      <br/>
+      <div>Let's see where the <mark>%s%s</mark> string exist in libc.</div>
+      <img src="pictures/ropme/address_difference.png" alt="error" style="width:70%">
+      <div>Seems like it is just 60 bytes ahead of <mark>/bin/sh</mark>.</div>
+      <div>However, we don't know whether the string of <mark>%s</mark> is from position 1 to 8, 2 to 9 or 3 to 10.</div>
+      <div>This means that the offset could be 60, 62 or 64 bytes.</div>
+      <br/>
+      <div>Let's try to trigger another error message so we can hopefully get the exact offset.</div>
+      <img src="pictures/ropme/trial_and_err.png" alt="error" style="width:70%">
+      <div>I'll just add 24 bytes to the offset and see what happens.</div>
+      <img src="pictures/ropme/arning.png" alt="error" style="width:70%">
+      <div>Ah yes, we get a new error message.</div>
+      <img src="pictures/ropme/real_difference.png" alt="error" style="width:70%">
+      <img src="pictures/ropme/off_by_64.png" alt="error" style="width:70%">
+      <div>With some arithmetic, we realise that the offset is 64 bytes.</div>
+      <div>Let's fix our code and try it against the remote server again.</div>
+      <img src="pictures/ropme/getshell.png" alt="shell" style="width:70%">
+      <div>We get a shell~!</div>
+      <br/>
+      <div style="font-size: 25px">Conclusion:</div>
+      <hr align="left" width="180px">
+      <div>I had a pretty fun time doing Ropme as it allowed me to put my knowledge from IppSec's video into practise.</div>
+      <div>This technique of leaking memory addresses is needed for quite a lot of stack-based buffer overflow challenges, and I'm happy that I sort of understand how it works now.</div>
+      <div>However I am still puzzled about the 64 bytes offset from the random string to /bin/sh... not sure if the libc was intentionally modified to cause this.</div>
+      <div>Please enlighten me if you know what happened there ;)</div>
+      <br/>
+      <div><center>Thank you for reading!</center></div>
+      <div><center>~chiefpie(currently struggling with promotional exams)</center></div>
+    </article>
+  </body>
+</html>
