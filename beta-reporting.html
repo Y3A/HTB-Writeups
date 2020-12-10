@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <style>
+      hr {
+        background-color: #D2D4D5;
+        height: 2px;
+        border: 0px;
+      }
+      .container{
+        margin-left:120px;
+        margin-right:120px;
+      }
+      div{
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      mark{
+        background-color: #F3CED7;
+        color: #F65B81;
+      }
+      a {
+        color: black;
+        text-decoration: none;
+      }
+      p {
+        font-family: Bahnschrift condensed;
+        font-size:20px;
+      }
+      .grid-container {
+        grid-template-columns: 75px 75px 75px;
+        grid-template-rows: 20px;
+      }
+    </style>
+    <title>STACKtheFlags beta-reporting Writeup</title>
+  </head>
+  <body class="container">
+    <header>
+      <div class="grid-container">
+        <a href="index.html" align="left">| Home |</a><!--
+        --><a href="about.html" align="left"> About |</a><!--
+        --><a href="writeups.html" align="left"> Writeups |</a>
+      </div>
+      <h1 style="color: #384B60"><center>Challenge Writeup: Beta-Reporting</center></h1>
+      <center><div style="color: #384B60">12/10/2020</div></center>
+      <hr/>
+    </header>
+    <article style="margin-top:60px">
+      <div style="font-size: 25px">Introduction:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <img src="pictures/beta-reporting/overview.png" alt="beta-reporting" style="width:58%">
+      <div><mark>beta-reporting</mark> is a pretty simple binary exploitation challenge from STACKtheFlags CTF 2020.</div>
+      <div>The binary contains a <mark>format string</mark> bug, which can be utilised for an arbitrary write.</div>
+      <div>It also generously provides 2 functions which helps us read the flag, so we just have to redirect code execution to those functions.</div>
+      <div>I will be showing 2 methods to solve this. The first method involves overwriting the <mark>GOT</mark> pointer of <mark>exit</mark>, and the second method involves leaking a libc address then overwriting <mark>malloc hook</mark>.</div>
+      <br/>
+      <div style="font-size: 25px">Binary Analysis:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>We are presented with 3 files after unzipping. 2 dummy flag files and the challenge binary.</div>
+      <img src="pictures/beta-reporting/flagfiles.png" alt="play" style="width:50%">
+      <img src="pictures/beta-reporting/checksec.png" alt="check" style="width:95%">
+      <div>Running <mark>file</mark> and <mark>checksec</mark> tells us that the binary is a 32 bit <mark>ELF</mark>, with only <mark>partial RELRO</mark> and no <mark>PIE</mark>.</div>
+      <div><mark>NX</mark> however is enabled, so we will probably not get shellcode execution easily.</div>
+      <br/>
+      <div>Let's decompile the binary in ghidra for more information.</div>
+      <img src="pictures/beta-reporting/functions.png" alt="play" style="width:70%">
+      <div>The binary is not stripped, so we get a clear view of the functions with their respective names.</div>
+      <div>The main function calls <mark>userchoice</mark>, which then can call some other functions.</div>
+      <br/>
+      <div>userchoice:</div>
+      <img src="pictures/beta-reporting/choices.png" alt="play" style="width:50%">
+      <div>The program goes into an infinite loop upon execution, and calls different functions depending on our input.</div>
+      <br/>
+      <div>makeareport:</div>
+      <img src="pictures/beta-reporting/makereport.png" alt="play" style="width:50%">
+      <div>This function calls <mark>malloc</mark> for space to store our input, then notes down our report ID.</div>
+      <br/>
+      <div>viewreport:</div>
+      <img src="pictures/beta-reporting/view_report.png" alt="play" style="width:50%">
+      <div>This function allows us to view our report by providing a name and the report ID.</div>
+      <div>However, there is a <mark>format string</mark> bug, as a user controlled variable is being passed to <mark>printf</mark> without any format specifiers.</div>
+      <br/>
+      <div>deletereport:</div>
+      <div>This function is pretty useless to solving the challenge.</div>
+      <br/>
+      <div>magicfunction:</div>
+      <img src="pictures/beta-reporting/magic.png" alt="play" style="width:30%">
+      <div>This function loads the string <mark>flag</mark> into an address.</div>
+      <img src="pictures/beta-reporting/magic_assembly.png" alt="play" style="width:60%">
+      <div>The disassembly is clearer to read.</div>
+      <br/>
+      <div>Besides these functions, there is also an <mark>unknownfunction</mark>.</div>
+      <img src="pictures/beta-reporting/readflag.png" alt="play" style="width:50%">
+      <div>This function basically reads the contents of the file pointed to by <mark>magic</mark> and prints it to standard output.</div>
+      <br/>
+      <div>Now the challenge objectives are pretty clear.</div>
+      <div>We have to first call <mark>magicfunction</mark> to load the string <mark>flag</mark>, then call <mark>unknownfunction</mark> to read it.</div>
+      <br/>
+      <div style="font-size: 25px">Exploitation:</div>
+      <hr align="left" width="180px">
+      <br/>
+      <div>Let's first test our <mark>format string</mark> vulnerability by leaking stack addresses.</div>
+      <img src="pictures/beta-reporting/bugfound.png" alt="play" style="width:60%">
+      <div>The leak works! And we get the stack offset of 8.</div>
+      <div>Now we can just type <mark>%8$x</mark> as description to leak our name input.</div>
+      <div>Let's start scripting the exploit.</div>
+      <br/>
+      <div>I've set up some functions to make the scripting easier.</div>
+      <img src="pictures/beta-reporting/setup.png" alt="play" style="width:70%">
+      <div>Now we can just call <mark>./exploit.py GDB NOASLR</mark> for a debugging session and <mark>./exploit.py REMOTE</mark> to exploit the challenge server.</div>
+      <br/>
+      <div>The first exploitation method involves overwriting the <mark>GOT</mark> entry of a function to <mark>unknownfunction</mark> with the <mark>%n</mark> format specifier.</div>
+      <div>I chose <mark>exit</mark> because overwriting it will not affect our normal usage of the binary.</div>
+      <img src="pictures/beta-reporting/checkpadding.png" alt="play" style="width:50%">
+      <div>I'll send in the number 4 to load flag, then check the number of spaces to pad to ensure that our input translates to the address of <mark>unknownfunction</mark> correctly.</div>
+      <div>My payload is <mark>%8$16c%8$n</mark>, which means to write 16 characters to the address supplied in the name input.</div>
+      <div>It doesn't make a difference if you use <mark>%16c%8$n</mark> instead.</div>
+      <br/>
+      <div>Running it in gdb confirms that our payload works. <mark>exit</mark>'s <mark>GOT</mark> entry is now 0x10, which is 16 in hex.</div>
+      <img src="pictures/beta-reporting/overwritten.png" alt="play" style="width:40%">
+      <div>Now we just need to replace 16 with the address of <mark>unknownfunction</mark> to call the flag.</div>
+      <img src="pictures/beta-reporting/first-exploit.png" alt="play" style="width:50%">
+      <div>Let's test it both locally and on the server.</div>
+      <img src="pictures/beta-reporting/works.png" alt="play" style="width:80%">
+      <div>Great! We get the flag with the first method.</div>
+      <br/>
+      <div>However, most challenge binaries now run on <mark>full RELRO</mark>.</div>
+      <div>This means that the <mark>GOT</mark> is not writable, and our method will not work.</div>
+      <div>In such scenarios, we can use the second method, which is to overwrite the <mark>malloc hook</mark>.</div>
+      <div>Even if the binary itself does not call malloc, we can force it to invoke <mark>sysmalloc</mark> by sending in a large enough input.</div>
+      <div>Fortunately, this binary does call malloc with option 1.</div>
+      <br/>
+      <div>Since <mark>ASLR</mark> is present, we have to first leak the address where libc is loaded at runtime, also known as the libc base address.</div>
+      <img src="pictures/beta-reporting/leakputs.png" alt="play" style="width:60%">
+      <div>With a <mark>format string</mark> bug, it is fairly easy to leak addresses.</div>
+      <div>Here I'll leak the address of <mark>puts</mark> with the <mark>%s</mark> specifier.</div>
+      <br/>
+      <div>run it remotely:</div>
+      <img src="pictures/beta-reporting/remoteputs.png" alt="play" style="width:70%">
+      <div>And we get the address of <mark>puts</mark> at runtime.</div>
+      <br/>
+      <div>libc database:</div>
+      <img src="pictures/beta-reporting/libcvers.png" alt="play" style="width:80%">
+      <div>Now we can download a copy of the libc used by the challenge server.</div>
+      <div>I'll choose the 32bit libc because our challenge binary is a 32bit ELF.</div>
+      <div>Since <mark>ASLR</mark> only randomizes the page address, we can just search the 12 least significant bits.</div>
+      <br/>
+      <div>Now we just do some math and find out the libc base address.</div>
+      <img src="pictures/beta-reporting/libcbasescript.png" alt="play" style="width:60%">
+      <img src="pictures/beta-reporting/libcbaseleaked.png" alt="play" style="width:70%">
+      <br/>
+      <div>The rest of the steps are similar. We overwrite <mark>malloc hook</mark> with <mark>unknownfunction</mark> and call option 1.</div>
+      <img src="pictures/beta-reporting/second-exploit.png" alt="play" style="width:60%">
+      <img src="pictures/beta-reporting/workstwo.png" alt="play" style="width:70%">
+      <div>The second method also grants us the flag, and still works when <mark>full RELRO</mark> is present.</div>
+      <br/>
+      <div style="font-size: 25px">Conclusion:</div>
+      <hr align="left" width="180px">
+      <div>This challenge is much easier than the other binary exploitation challenges in this CTF, and it is also the only one I could solve (oops).</div>
+      <div>Unfortunately I wasn't able to first blood it as I missed out the functions during the CTF and was trying to get a shell...</div>
+      <div>It's always safe to just run your binary through a decompiler and take a look at its functions.</div>
+      <div>That's all for the writeup. Thanks to <mark>GovTech</mark> and the challenge creators for hosting this CTF!</div>
+      <div>PS: Im dying to read the writeups for the recruitment challenge lol that was really hard for me.</div>
+      <br/>
+      <div><center>Thank you for reading!</center></div>
+      <div><center>~chiefpie</center></div>
+    </article>
+  </body>
+</html>
